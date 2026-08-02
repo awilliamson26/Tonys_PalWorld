@@ -1,0 +1,14 @@
+# Keep Docker build context small
+.git
+.github
+.vscode
+
+docs
+docusaurus
+examples
+kubernetes
+migration
+tests
+
+# Large runtime/game data is not needed for image builds
+palworld/

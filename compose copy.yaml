@@ -1,0 +1,52 @@
+---
+services:
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      VPN_SERVICE_PROVIDER: protonvpn
+      VPN_TYPE: wireguard
+      WIREGUARD_PRIVATE_KEY: ${WireGuard_KEY}
+      SERVER_COUNTRIES: United States
+      VPN_PORT_FORWARDING: "on"
+      VPN_PORT_FORWARDING_PROVIDER: protonvpn
+    volumes:
+      - gluetun_data:/tmp/gluetun
+    ports:
+      - "8211:8211/udp"
+      - 49152-65535:49152-65535/udp
+      - "8000:8000/tcp"
+    restart: unless-stopped
+
+  palworld:
+    image: thijsvanloef/palworld-server-docker:latest
+    restart: unless-stopped
+    container_name: palworld-server_test
+    stop_grace_period: 30s  # Set to however long you are willing to wait for the container to gracefully stop
+    network_mode: "service:gluetun"
+    environment:
+      PUID: 1000
+      PGID: 1000
+      PORT: 8211  # Match the container's internal game port
+      PLAYERS: 16  # Optional but recommended
+      SERVER_PASSWORD: "Prime!"  # Optional but recommended
+      REST_API_ENABLED: true
+      REST_API_PORT: 8212
+      TZ: "UTC"
+      ADMIN_PASSWORD: "adminPasswordHere"
+      COMMUNITY: false  # Enable this if you want your server to show up in the community servers tab, USE WITH SERVER_PASSWORD!
+      SERVER_NAME: "Epstein's Island by Anthony"
+      SERVER_DESCRIPTION: "palworld-server-docker by Thijs van Loef"
+      CROSSPLAY_PLATFORMS: "(Steam,Xbox,PS5,Mac)"
+      LOG_LEVEL: "INFO"  # DEBUG/INFO/WARN/ERROR. Please be aware that DEBUG will log all command arguments, including secrets, to the logs. Share with caution.
+    volumes:
+      - ./palworld:/palworld/
+    depends_on:
+      - gluetun
+
+volumes:
+  gluetun_data:

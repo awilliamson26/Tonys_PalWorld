@@ -1,28 +1,74 @@
----
 services:
+  gluetun:
+      image: qmcgaw/gluetun:latest
+      container_name: gluetun
+      cap_add:
+        - NET_ADMIN # Mandatory for creating network tunnels
+      devices:
+        - /dev/net/tun:/dev/net/tun # Mandatory for OpenVPN/Wireguard
+      ports:
+        - "8211:8211/udp" # Palworld Game Traffic must be opened on Gluetun
+        - "8212:8212/udp" # Palworld API Traffic must be opened on Gluetun
+      environment:
+        - VPN_SERVICE_PROVIDER=protonvpn # Change to your provider
+        - VPN_TYPE=wireguard
+        - WIREGUARD_PRIVATE_KEY=$WireGuard_KEY
+        - WIREGUARD_ADDRESSES=$WireGuard_Ips
+        - SERVER_COUNTRIES=United States
+        - FIREWALL=on
+        - VPN_PORT_FORWARDING_LISTENING_PORTS=8211
+        - VPN_PORT_FORWARDING=on
+        - VPN_PORT_FORWARDING_PROVIDER=protonvpn
+        - FIREWALL_OUTBOUND_SUBNETS=192.168.1.0/24
+        - LOG_LEVEL=info
+      volumes:
+        - gluetun_data:/tmp/gluetun 
+        - ./gluetun/port-forward.sh:/scripts/port-forward.sh:ro
+      restart: always
+      healthcheck:
+        test: ["CMD", "wget", "-qO-", "https://am.i.mullvad.net/ip", "-T", "10"]
+        interval: 30s
+        timeout: 15s
+        retries: 3
+        start_period: 30s
+
   palworld:
     image: thijsvanloef/palworld-server-docker:latest
     restart: unless-stopped
-    container_name: palworld-server
-    stop_grace_period: 30s  # Set to however long you are willing to wait for the container to gracefully stop
-    ports:
-      - 36763:8211/udp  # Host port 46949 -> container game port 8211
-      #- 27015:27015/udp  # Required if you want your server to show up in the community servers tab
-      - 8212:8212/tcp  # REST API enabled port, enabled by default. DO NOT PORT FORWARD THIS.
+    container_name: palworld-server_test
+    stop_grace_period: 30s
+    network_mode: "service:gluetun"
     environment:
       PUID: 1000
       PGID: 1000
-      PORT: 8211  # Match the container's internal game port
-      PLAYERS: 16  # Optional but recommended
-      SERVER_PASSWORD: "Prime!"  # Optional but recommended
+      PLAYERS: 16
+      SERVER_PASSWORD: "Prime!"
       REST_API_ENABLED: true
-      REST_API_PORT: 8212
       TZ: "UTC"
       ADMIN_PASSWORD: "adminPasswordHere"
-      COMMUNITY: false  # Enable this if you want your server to show up in the community servers tab, USE WITH SERVER_PASSWORD!
+      COMMUNITY: false
       SERVER_NAME: "Epstein's Island by Anthony"
       SERVER_DESCRIPTION: "palworld-server-docker by Thijs van Loef"
       CROSSPLAY_PLATFORMS: "(Steam,Xbox,PS5,Mac)"
-      LOG_LEVEL: "INFO"  # DEBUG/INFO/WARN/ERROR. Please be aware that DEBUG will log all command arguments, including secrets, to the logs. Share with caution.
+      LOG_LEVEL: "INFO"
     volumes:
       - ./palworld:/palworld/
+    depends_on:
+      gluetun:
+        condition: service_healthy
+  vpn-bot:
+    build: ./bot
+    # Shares gluetun's network stack so it sees the same VPN exit IP players connect to
+    network_mode: "service:gluetun"
+    volumes:
+      - gluetun_data:/tmp/gluetun:ro
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - GAME_PORT=8211
+      - SERVER_LABEL=Palworld Server
+    restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+volumes:
+  gluetun_data:

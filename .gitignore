@@ -4,3 +4,6 @@ palworld
 values*.yaml
 .env
 .vscode
+secrets
+bot
+tests
